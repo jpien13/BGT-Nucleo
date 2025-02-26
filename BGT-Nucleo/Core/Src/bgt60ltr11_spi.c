@@ -80,3 +80,10 @@ unit8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
 	HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
 	return HAL_OK;
 }
+
+uint8_t bgt60ltr11_HW_reset(void){
+	HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_RESET);
+	HAL_Delay(10);
+	HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+	return HAL_OK;
+}
