@@ -87,3 +87,18 @@ uint8_t bgt60ltr11_HW_reset(void){
 	HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
 	return HAL_OK;
 }
+
+/*
+ * Register assignment of Reg36
+ * Page 45 https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f
+ */
+uint8_t bgt60ltr11_adc_status(void){
+	uint16_t adc_status;
+	if(bgt60ltr11_spi_read(0x24, &adc_status) != HAL_OK){
+		return HAL_ERROR;
+	}
+	if(adc_status ==0){
+		return HAL_ERROR;
+	}
+	return HAL_OK;
+}
