@@ -162,6 +162,86 @@ uint8_t bgt60ltr11_test(void){
 
 }
 
+/*
+ * Read ADC channel data directly into the provided pointers
+ */
+uint8_t bgt60ltr11_get_RAW_data(uint16_t *ifi, uint16_t *ifq){
+	if (bgt60ltr11_spi_read(0x28, ifi) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_read(0x29, ifq) != HAL_OK) return HAL_ERROR;
+	return HAL_OK;
+}
+
+uint8_t bgt60ltr11_pulsed_mode_init(void) {
+	// Perform soft reset
+	if (bgt60ltr11_soft_reset(0) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	// Write to each register and check the result
+
+	if (bgt60ltr11_spi_write(0x00, 0x0000) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x01, 0x0000) != HAL_OK) return HAL_ERROR;
+	    HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x02, 0x2A00) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	// TODO need to check the value for the REG3
+
+	if (bgt60ltr11_spi_write(0x04, 0x0F3A) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x05, 0x0FB0) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x06, 0x6800) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x07, 0x0557) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x08, 0x000E) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x09, 0x00E8) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x0A, 0x004F) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x0C, 0x0000) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x0D, 0x0000) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x0E, 0x0000) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x0F, 0x0000) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x22, 0x0000) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x23, 0x0000) != HAL_OK) return HAL_ERROR;
+	    HAL_Delay(1);
+
+	if (bgt60ltr11_spi_write(0x24, 0x0000) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+	/*
+	// ADC clock EN, bandgap EN, ADC EN
+	if (bgt60ltr11_spi_write(0x22, 0x0007) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+	*/
+	if (bgt60ltr11_spi_write(0x0F, 0x4000) != HAL_OK) return HAL_ERROR;
+	HAL_Delay(1);
+
+	return HAL_OK;
+}
+
+
 // TODO: pulsed mode init
 // TODO: get RAW data
 // TODO: Look at repo main.c and reverse engineer
