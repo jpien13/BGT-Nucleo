@@ -241,5 +241,5 @@ uint8_t bgt60ltr11_pulsed_mode_init(void) {
 	return HAL_OK;
 }
 
-
+// TODO: Figure out the gpio.c and spi.c files, give all files currently have
 // TODO: Look at repo main.c and reverse engineer
