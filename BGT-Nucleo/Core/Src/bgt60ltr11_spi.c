@@ -123,7 +123,7 @@ uint8_t bgt60ltr11_soft_reset(uint8_t wait){
 			if (reg0 == 0 && reg56 & (1 << 13)){
 				return HAL_OK;
 			}
-			HAL_DELAY(1);
+			HAL_Delay(1);
 		}
 		return HAL_ERROR;
 	}
@@ -141,6 +141,27 @@ uint8_t bgt60ltr11_ADC_Convert(void){
 	if (bgt60ltr11_spi_write(0x23, 0010) != HAL_OK){
 		return HAL_ERROR;
 	}
-	HAL_DELAY(1);
+	HAL_Delay(1);
 	return HAL_OK;
 }
+
+/*
+ * Test if SPI works by reading reg 0x02 and verify value is 0x2A00
+ */
+uint8_t bgt60ltr11_test(void){
+	uint16_t data = 0;
+	if (bgt60ltr11_spi_read(0x02, &data) != HAL_OK){
+		return HAL_ERROR;
+	}
+	HAL_Delay(1);
+	if (data != 0x2A00){
+		HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+		return HAL_ERROR;
+	}
+	return HAL_OK;
+
+}
+
+// TODO: pulsed mode init
+// TODO: get RAW data
+// TODO: Look at repo main.c and reverse engineer
