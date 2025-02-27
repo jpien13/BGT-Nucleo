@@ -62,8 +62,8 @@ uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
  * https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f
  *
  */
-unit8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
-	unt8_t tx_data[3];
+uint8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
+	uint8_t tx_data[3];
 	uint16_t wrdata = data;
 
 	tx_data[0] = (uint8_t)((reg_addr << 1) | 0x01); // Shifts the 7-bit address to make room for the RW bit. Address (7 bits) + RW bit (1)
@@ -242,6 +242,4 @@ uint8_t bgt60ltr11_pulsed_mode_init(void) {
 }
 
 
-// TODO: pulsed mode init
-// TODO: get RAW data
 // TODO: Look at repo main.c and reverse engineer
