@@ -102,3 +102,45 @@ uint8_t bgt60ltr11_adc_status(void){
 	}
 	return HAL_OK;
 }
+
+/*
+ *  Resampling can be triggered by setting the reset pin or activating the soft reset by writing the soft_reset
+ *  bit (Reg15[15]).
+ *  There are 56 Registers according to register overview on page 21
+ *  Page 6 https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f
+ */
+uint8_t bgt60ltr11_soft_reset(uint8_t wait){
+	bgt60ltr11_spi_write(0x0F, (1 << 15));
+	uint16_t reg56 = 0;
+	uint16_t reg0 = 0;
+
+	if (wait){
+		// wait till init_done in REG56 is set
+		for (volatile uint16_t i = 0; i < 2048; i++){
+			bgt60ltr11_spi_read(0x38, &reg56);
+			bgt60ltr11_spi_read(0x00, &reg0);
+			// check if REG0 has default values and REG56 bit init_done is set
+			if (reg0 == 0 && reg56 & (1 << 13)){
+				return HAL_OK;
+			}
+			HAL_DELAY(1);
+		}
+		return HAL_ERROR;
+	}
+	return HAL_OK;
+}
+
+/*
+ * Convert all ADC channels
+ * A write access to Reg35 starts ADC conversion with the selected settings, even if the same data is written into
+ * the register.
+ * Address: 0x23
+ * reset value: 0x0000
+ */
+uint8_t bgt60ltr11_ADC_Convert(void){
+	if (bgt60ltr11_spi_write(0x23, 0010) != HAL_OK){
+		return HAL_ERROR;
+	}
+	HAL_DELAY(1);
+	return HAL_OK;
+}
