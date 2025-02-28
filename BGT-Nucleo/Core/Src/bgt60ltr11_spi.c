@@ -6,12 +6,15 @@
  */
 
 #include "bgt60ltr11_spi.h"
+#include "main.h"
 
 #define BGT60_CS_PORT GPIOA
 #define BGT60_CS_PIN  GPIO_PIN_4
 extern void HAL_GPIO_TogglePin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
 #define LD3_GPIO_Port GPIOB
 #define LD3_Pin GPIO_PIN_3
+extern SPI_HandleTypeDef hspi1;
+
 /*
  *
  * 1. Transfer starts with the falling edge of SPICS

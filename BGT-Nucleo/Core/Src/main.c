@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
+#include "bgt60ltr11_spi.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -45,7 +45,9 @@ SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
-
+uint16_t IFI = 0;
+uint16_t IFQ = 0;
+uint8_t radar_initialized = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -94,6 +96,23 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+  bgt60ltr11_HW_reset();
+  HAL_Delay(100);  // Wait for radar to stabilize
+  if (bgt60ltr11_pulsed_mode_init() != HAL_OK) {
+	  // Failed to initialize - LED should blink in error handler
+	  Error_Handler();
+  }
+  HAL_Delay(1000);
+
+  // Test SPI communication
+  if (bgt60ltr11_test() != HAL_OK) {
+	  // SPI test failed
+	  Error_Handler();
+  }
+
+  // radar successfully initialized
+  radar_initialized = 1;
 
   /* USER CODE END 2 */
 
@@ -101,6 +120,13 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  if (radar_initialized){
+		  if(bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK){
+			  // Toggle LED to indicate successful reading
+			  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+		  }
+	  }
+	  HAL_Delay(100); // small delay between readings
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -296,6 +322,14 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
+	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+	  HAL_Delay(50);
+	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+	  HAL_Delay(50);
+	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+	  HAL_Delay(50);
+	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+	  HAL_Delay(500);  // Longer pause between double-blinks
   }
   /* USER CODE END Error_Handler_Debug */
 }
