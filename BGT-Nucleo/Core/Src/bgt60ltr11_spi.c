@@ -6,7 +6,6 @@
  */
 
 #include "bgt60ltr11_spi.h"
-#include "gpio.h"
 
 #define BGT60_CS_PORT GPIOA
 #define BGT60_CS_PIN  GPIO_PIN_4

@@ -1,9 +1,0 @@
-../Core/Src/bgt60ltr11_spi.c:29:9:bgt60ltr11_spi_read	2
-../Core/Src/bgt60ltr11_spi.c:67:9:bgt60ltr11_spi_write	2
-../Core/Src/bgt60ltr11_spi.c:86:9:bgt60ltr11_HW_reset	1
-../Core/Src/bgt60ltr11_spi.c:97:9:bgt60ltr11_adc_status	3
-../Core/Src/bgt60ltr11_spi.c:114:9:bgt60ltr11_soft_reset	5
-../Core/Src/bgt60ltr11_spi.c:142:9:bgt60ltr11_ADC_Convert	2
-../Core/Src/bgt60ltr11_spi.c:153:9:bgt60ltr11_test	3
-../Core/Src/bgt60ltr11_spi.c:170:9:bgt60ltr11_get_RAW_data	3
-../Core/Src/bgt60ltr11_spi.c:176:9:bgt60ltr11_pulsed_mode_init	20

@@ -9,7 +9,6 @@
 #define INC_BGT60LTR11_SPI_H_
 
 #include "stdint.h"
-#include "spi.h"
 
 // Return HAL_OK or HAL_ERROR
 uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data);

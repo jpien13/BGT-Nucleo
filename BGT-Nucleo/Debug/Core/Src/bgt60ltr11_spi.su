@@ -1,9 +1,0 @@
-../Core/Src/bgt60ltr11_spi.c:29:9:bgt60ltr11_spi_read	32	static
-../Core/Src/bgt60ltr11_spi.c:67:9:bgt60ltr11_spi_write	24	static
-../Core/Src/bgt60ltr11_spi.c:86:9:bgt60ltr11_HW_reset	8	static
-../Core/Src/bgt60ltr11_spi.c:97:9:bgt60ltr11_adc_status	16	static
-../Core/Src/bgt60ltr11_spi.c:114:9:bgt60ltr11_soft_reset	24	static
-../Core/Src/bgt60ltr11_spi.c:142:9:bgt60ltr11_ADC_Convert	8	static
-../Core/Src/bgt60ltr11_spi.c:153:9:bgt60ltr11_test	16	static
-../Core/Src/bgt60ltr11_spi.c:170:9:bgt60ltr11_get_RAW_data	16	static
-../Core/Src/bgt60ltr11_spi.c:176:9:bgt60ltr11_pulsed_mode_init	8	static
