@@ -56,7 +56,7 @@ static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
-
+// I cant believe it works
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
