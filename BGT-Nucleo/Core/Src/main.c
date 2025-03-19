@@ -18,10 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "fft.h"
+#include "bgt60ltr11_spi.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <math.h>
 /* USER CODE END Includes */
@@ -49,9 +52,28 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+uint16_t IFI_sample[FFT_BUFFER_SIZE];
+uint16_t IFQ_sample[FFT_BUFFER_SIZE];
+
+extern float32_t sampled_data[2 * FFT_BUFFER_SIZE];
+// Define two buffers for double buffering
+float32_t buffer1[2 * FFT_BUFFER_SIZE];
+float32_t buffer2[2 * FFT_BUFFER_SIZE];
+
+// Pointers to active (writing) and processing buffers
+float32_t *active_buffer = buffer1;
+float32_t *processing_buffer = buffer2;
+
+float32_t max_value = 0.0f;
+float32_t peak_index = 0.0f;
+float32_t target_velocity = 0.0f;
+
 uint16_t IFI = 0;
 uint16_t IFQ = 0;
+uint32_t error_cnt = 0;
 uint8_t radar_initialized = 0;
+uint16_t acquired_sample_count = 0;
+uint8_t data_ready_f = 1;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -60,7 +82,6 @@ static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART2_UART_Init(void);
-
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -96,6 +117,7 @@ int main(void)
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
+  HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 
   /* USER CODE BEGIN Init */
 
@@ -124,12 +146,14 @@ int main(void)
   HAL_Delay(1000);
 
   // Test SPI communication
-  if (bgt60ltr11_test() != HAL_OK) {
-	  // SPI test failed
-	  Error_Handler();
-  }
+//  if (bgt60ltr11_test() != HAL_OK) {
+//	  // SPI test failed
+//	  Error_Handler();
+//  }
+  HAL_TIM_Base_Start_IT(&htim2);
   // radar successfully initialized
   radar_initialized = 1;
+
 
   /* USER CODE END 2 */
 
@@ -137,9 +161,15 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if (radar_initialized){
+	  printf("radar_init and data_ready: %u\n", (radar_initialized && data_ready_f));
+	  if (radar_initialized && data_ready_f){
+		  printf("---------------------------------- data ready!\n");
 		  if(bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK){
-			  printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
+			  // printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
+			  fft256_spectrum(processing_buffer);
+			  find_peak_frequency(processing_buffer, FFT_BUFFER_SIZE, 1000, &peak_index, &max_value, &target_velocity);
+			  data_ready_f = 0;
+			  printf("peak_index: %d, max_value: %d, target_velocity: %d\r\n", peak_index, max_value, target_velocity);
 			  // Toggle LED to indicate successful reading
 			  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 		  }
@@ -362,7 +392,47 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if (htim == &htim2)
+	    {
+	        // Ensure we don't overflow the active buffer
+	        if (acquired_sample_count < FFT_BUFFER_SIZE)
+	        {
+	            if (bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK)
+	            {
+	            	// printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
+	                // Only store values if they are below the threshold 0x3FC
+	                if (IFI <= 0x3FC && IFQ <= 0x3FC)
+	                {
+	                    // Store radar data into the active buffer
+	                    active_buffer[2 * acquired_sample_count + 0] = (float32_t)(IFI >> 2) / 255.0f; // Scale to [0, 1]
+	                    active_buffer[2 * acquired_sample_count + 1] = (float32_t)(IFQ >> 2) / 255.0f; // Scale to [0, 1]
 
+	                    acquired_sample_count++; // Increment sample count
+	                }
+	                // printf("acquired sample count: %u\n", acquired_sample_count);
+	            }
+	            else
+	            {
+	                // Handle radar read error
+	                error_cnt++;
+	            }
+	        }
+	        else
+	        {
+	            // Buffer is full, toggle buffers
+	            float32_t *temp = active_buffer;
+	            active_buffer = processing_buffer;
+	            processing_buffer = temp;
+
+	            // Signal data is ready for processing
+	            data_ready_f = 1;
+	            // printf("set data ready to true!!\n");
+	            acquired_sample_count = 0; // Reset sample count for the new active buffer
+	        }
+	    }
+}
 /* USER CODE END 4 */
 
 /**
