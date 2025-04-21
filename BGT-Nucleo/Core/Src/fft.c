@@ -206,16 +206,19 @@ void find_peak_frequency(const float32_t *spectrum, uint32_t fft_size, float32_t
 {
     float32_t max_value = 0.0f;
     uint32_t peak_index = 0;
+    bool first = true;
 
     // Ensure fft_size is valid
 	if (fft_size == 0 || spectrum == NULL || peak_freq == NULL || peak_value == NULL || target_velocity == NULL) {
+		printf("GOT BAD DATA!!!\r\n");
 		return; // Invalid input, handle error appropriately in production
 	}
 
     for (uint32_t i = 0; i < fft_size; i++) {
-        if (spectrum[i] > max_value) {
+        if (spectrum[i] > max_value || first) {
             max_value = spectrum[i];
             peak_index = i;
+            first = false;
         }
     }
 
@@ -236,7 +239,7 @@ void find_peak_frequency(const float32_t *spectrum, uint32_t fft_size, float32_t
 }
 
 
-void test_fft(float32_t* max_value, float32_t* peak_index,float32_t* target_velocity)
+void test_fft(float32_t* max_value, float32_t* peak_index, float32_t* target_velocity)
 {
 
     generate_sine_wave(sampled_data, FFT_BUFFER_SIZE);

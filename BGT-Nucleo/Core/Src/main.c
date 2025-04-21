@@ -18,11 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "fft.h"
-#include "bgt60ltr11_spi.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "fft.h"
+#include "bgt60ltr11_spi.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -117,7 +117,6 @@ int main(void)
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-  HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 
   /* USER CODE BEGIN Init */
 
@@ -154,6 +153,9 @@ int main(void)
   // radar successfully initialized
   radar_initialized = 1;
 
+  bool collecting_data = true;
+
+
 
   /* USER CODE END 2 */
 
@@ -161,18 +163,31 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  printf("radar_init and data_ready: %u\n", (radar_initialized && data_ready_f));
-	  if (radar_initialized && data_ready_f){
-		  printf("---------------------------------- data ready!\n");
-		  if(bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK){
-			  // printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
-			  fft256_spectrum(processing_buffer);
-			  find_peak_frequency(processing_buffer, FFT_BUFFER_SIZE, 1000, &peak_index, &max_value, &target_velocity);
-			  data_ready_f = 0;
-			  printf("peak_index: %d, max_value: %d, target_velocity: %d\r\n", peak_index, max_value, target_velocity);
-			  // Toggle LED to indicate successful reading
-			  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+	  // printf("-\r\n");
+	  if (HAL_GPIO_ReadPin(TD_GPIO_Port, TD_Pin) == GPIO_PIN_RESET) {
+		  // TD = 0
+		  if (HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET) {
+			  // PD = 1
+			  // printf("APPROACHING!!!!!\r\n");
+		  } else {
+			  // PD = 0
+			  // printf("DEPARTING!!!!!\r\n");
 		  }
+	  }
+	  //printf("radar_init and data_ready: %u\r\n", (radar_initialized && data_ready_f));
+	  if (radar_initialized && data_ready_f){
+		  //printf("---------------------------------- data ready!\r\n");
+		  //if(bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK){
+		  // printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
+		  fft256_spectrum(processing_buffer);
+		  // why is sampling_rate = 1000?
+		  find_peak_frequency(processing_buffer, FFT_BUFFER_SIZE, 1000, &peak_index, &max_value, &target_velocity);
+		  data_ready_f = 0;
+		  sendDataToMonitor(target_velocity);
+		  // printf("peak_index: %.5f, max_value: %.5f, target_velocity: %.5f\r\n", peak_index, max_value, target_velocity);
+		  // Toggle LED to indicate successful reading
+		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+		  //}
 	  }
 	  HAL_Delay(100); // small delay between readings
 	  // austin was here again
@@ -380,6 +395,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : PD_Pin TD_Pin */
+  GPIO_InitStruct.Pin = PD_Pin|TD_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
   /*Configure GPIO pin : LD3_Pin */
   GPIO_InitStruct.Pin = LD3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -432,6 +453,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	            acquired_sample_count = 0; // Reset sample count for the new active buffer
 	        }
 	    }
+}
+
+void sendDataToMonitor(float32_t vel) {
+	printf("DATA,%.5f\n", vel);
 }
 /* USER CODE END 4 */
 
