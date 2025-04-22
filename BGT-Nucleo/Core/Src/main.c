@@ -163,18 +163,18 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  // printf("-\r\n");
+	  printf("-\r\n");
 	  if (HAL_GPIO_ReadPin(TD_GPIO_Port, TD_Pin) == GPIO_PIN_RESET) {
 		  // TD = 0
 		  if (HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET) {
 			  // PD = 1
-			  // printf("APPROACHING!!!!!\r\n");
+			  printf("APPROACHING!!!!!\r\n");
 		  } else {
 			  // PD = 0
-			  // printf("DEPARTING!!!!!\r\n");
+			  printf("DEPARTING!!!!!\r\n");
 		  }
 	  }
-	  //printf("radar_init and data_ready: %u\r\n", (radar_initialized && data_ready_f));
+	  printf("radar_init=%u, data_ready=%u\r\n", radar_initialized, data_ready_f);
 	  if (radar_initialized && data_ready_f){
 		  //printf("---------------------------------- data ready!\r\n");
 		  //if(bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK){
@@ -183,8 +183,8 @@ int main(void)
 		  // why is sampling_rate = 1000?
 		  find_peak_frequency(processing_buffer, FFT_BUFFER_SIZE, 1000, &peak_index, &max_value, &target_velocity);
 		  data_ready_f = 0;
-		  sendDataToMonitor(target_velocity);
-		  // printf("peak_index: %.5f, max_value: %.5f, target_velocity: %.5f\r\n", peak_index, max_value, target_velocity);
+		  //sendDataToMonitor(target_velocity);
+		  printf("peak_index: %.5f, max_value: %.5f, target_velocity: %.5f\r\n", peak_index, max_value, target_velocity);
 		  // Toggle LED to indicate successful reading
 		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 		  //}
@@ -270,7 +270,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -422,7 +422,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	        {
 	            if (bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK)
 	            {
-	            	// printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
+	            	printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
 	                // Only store values if they are below the threshold 0x3FC
 	                if (IFI <= 0x3FC && IFQ <= 0x3FC)
 	                {
