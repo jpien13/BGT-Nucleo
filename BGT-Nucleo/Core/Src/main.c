@@ -74,6 +74,13 @@ uint32_t error_cnt = 0;
 uint8_t radar_initialized = 0;
 uint16_t acquired_sample_count = 0;
 uint8_t data_ready_f = 1;
+
+#define VELOCITY_BUFFER_SIZE 5
+float32_t velocity_buffer[VELOCITY_BUFFER_SIZE];
+uint8_t velocity_buffer_index = 0;
+uint8_t velocity_buffer_filled = 0;
+float32_t velocity_average = 0.0f;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -83,7 +90,7 @@ static void MX_SPI1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+float32_t calculate_rolling_average_with_filtering(float32_t new_value);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -153,9 +160,9 @@ int main(void)
   // radar successfully initialized
   radar_initialized = 1;
 
-  bool collecting_data = true;
-
-
+  for (uint8_t i = 0; i < VELOCITY_BUFFER_SIZE; i++) {
+      velocity_buffer[i] = 0.0f;
+  }
 
   /* USER CODE END 2 */
 
@@ -175,21 +182,26 @@ int main(void)
 			  printf("DEPARTING!!!!!\r\n");
 		  }
 	  }
-	  printf("radar_init=%u, data_ready=%u\r\n", radar_initialized, data_ready_f);
+	  //printf("radar_init=%u, data_ready=%u\r\n", radar_initialized, data_ready_f);
+
 	  if (radar_initialized && data_ready_f){
-		  //printf("---------------------------------- data ready!\r\n");
-		  //if(bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK){
 		  // printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
-		  fft256_spectrum(processing_buffer);
-		  // why is sampling_rate = 1000?
-		  find_peak_frequency(processing_buffer, FFT_BUFFER_SIZE, 1000, &peak_index, &max_value, &target_velocity);
-		  data_ready_f = 0;
-		  //sendDataToMonitor(target_velocity);
-		  printf("peak_index: %.5f, max_value: %.5f, target_velocity: %.5f\r\n", peak_index, max_value, target_velocity);
-		  // Toggle LED to indicate successful reading
-		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
-		  //}
+	      fft256_spectrum(processing_buffer);
+	      find_peak_frequency(processing_buffer, FFT_BUFFER_SIZE, 1000, &peak_index, &max_value, &target_velocity);
+
+	      // Calculate the rolling average of the velocity
+	      velocity_average = calculate_rolling_average_with_filtering(target_velocity);
+
+	      data_ready_f = 0;
+
+	      // Print both raw and averaged velocity for comparison
+	      printf("peak_index: %.5f, max_value: %.5f, raw_velocity: %.5f, avg_velocity: %.5f\r\n",
+	             peak_index, max_value, target_velocity, velocity_average);
+
+	      // Toggle LED to indicate successful reading
+	      HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 	  }
+
 	  HAL_Delay(100); // small delay between readings
 	  // austin was here again
     /* USER CODE END WHILE */
@@ -414,6 +426,8 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if (htim == &htim2)
@@ -423,7 +437,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	        {
 	            if (bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK)
 	            {
-	            	printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
+	            	//printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
 	                // Only store values if they are below the threshold 0x3FC
 	                if (IFI <= 0x3FC && IFQ <= 0x3FC)
 	                {
@@ -458,6 +472,39 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 void sendDataToMonitor(float32_t vel) {
 	printf("DATA,%.5f\n", vel);
+}
+
+float32_t calculate_rolling_average_with_filtering(float32_t new_value) {
+    // Set threshold for outlier detection (adjust based on your expected velocity range)
+    float32_t max_deviation = 20.0f; // Maximum allowed deviation from current average
+
+    // If we have a previous average and the new value deviates too much, reject it
+    if (velocity_buffer_filled && fabsf(new_value - velocity_average) > max_deviation) {
+        // Outlier detected, don't add to buffer
+        printf("Outlier rejected: %.5f (current avg: %.5f)\r\n", new_value, velocity_average);
+        return velocity_average; // Return previous average
+    }
+
+    // Regular rolling average calculation
+    velocity_buffer[velocity_buffer_index] = new_value;
+    velocity_buffer_index = (velocity_buffer_index + 1) % VELOCITY_BUFFER_SIZE;
+
+    if (velocity_buffer_index == 0 && velocity_buffer_filled == 0) {
+        velocity_buffer_filled = 1;
+    }
+
+    float32_t sum = 0.0f;
+    uint8_t count = velocity_buffer_filled ? VELOCITY_BUFFER_SIZE : velocity_buffer_index;
+
+    if (count == 0) {
+        return new_value;
+    }
+
+    for (uint8_t i = 0; i < count; i++) {
+        sum += velocity_buffer[i];
+    }
+
+    return sum / count;
 }
 /* USER CODE END 4 */
 
