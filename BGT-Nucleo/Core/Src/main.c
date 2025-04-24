@@ -81,6 +81,9 @@ uint8_t velocity_buffer_index = 0;
 uint8_t velocity_buffer_filled = 0;
 float32_t velocity_average = 0.0f;
 
+uint32_t pa5_toggle_timestamp = 0;
+const uint32_t PA5_TOGGLE_INTERVAL = 5000; // 5 seconds in milliseconds
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -182,6 +185,15 @@ int main(void)
 			  printf("DEPARTING!!!!!\r\n");
 		  }
 	  }
+
+	  // Check if it's time to toggle PA5
+	  uint32_t current_time = HAL_GetTick();
+	  if(current_time - pa5_toggle_timestamp >= PA5_TOGGLE_INTERVAL) {
+		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+		  pa5_toggle_timestamp = current_time;
+		  printf("Toggled PA5\r\n"); // debug message
+	  }
+
 	  //printf("radar_init=%u, data_ready=%u\r\n", radar_initialized, data_ready_f);
 
 	  if (radar_initialized && data_ready_f){
@@ -396,13 +408,13 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PA4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  /*Configure GPIO pins : PA4 PA5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
