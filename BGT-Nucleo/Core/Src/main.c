@@ -81,9 +81,9 @@ uint8_t velocity_buffer_index = 0;
 uint8_t velocity_buffer_filled = 0;
 float32_t velocity_average = 0.0f;
 
-uint32_t pa5_toggle_timestamp = 0;
-const uint32_t PA5_TOGGLE_INTERVAL = 5000; // 5 seconds in milliseconds
-GPIO_PinState pa5_current_state = GPIO_PIN_RESET;
+uint32_t pa10_toggle_timestamp = 0;
+const uint32_t PA10_TOGGLE_INTERVAL = 5000; // 5 seconds in milliseconds
+GPIO_PinState pa10_current_state = GPIO_PIN_RESET;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -148,8 +148,8 @@ int main(void)
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-  pa5_current_state = GPIO_PIN_RESET;
-  pa5_toggle_timestamp = HAL_GetTick();
+  pa10_current_state = GPIO_PIN_RESET;
+  pa10_toggle_timestamp = HAL_GetTick();
 
 
   bgt60ltr11_HW_reset();
@@ -192,14 +192,14 @@ int main(void)
 		  }
 	  }
 
-	  // Check if it's time to toggle PA5
+	  // Check if it's time to toggle PA10
 	  uint32_t current_time = HAL_GetTick();
-	  if(current_time - pa5_toggle_timestamp >= PA5_TOGGLE_INTERVAL) {
+	  if(current_time - pa10_toggle_timestamp >= PA10_TOGGLE_INTERVAL) {
 		  // Toggle the state by writing the opposite of current state
-		  pa5_current_state = (pa5_current_state == GPIO_PIN_RESET) ? GPIO_PIN_SET : GPIO_PIN_RESET;
-		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, pa5_current_state);
-		  pa5_toggle_timestamp = current_time;
-		  printf("PA5 set to %s\r\n", (pa5_current_state == GPIO_PIN_SET) ? "HIGH" : "LOW"); // improved debug message
+		  pa10_current_state = (pa10_current_state == GPIO_PIN_RESET) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, pa10_current_state);
+		  pa10_toggle_timestamp = current_time;
+		  printf("PA10 set to %s\r\n", (pa10_current_state == GPIO_PIN_SET) ? "HIGH" : "LOW"); // improved debug message
 	  }
 
 	  //printf("radar_init=%u, data_ready=%u\r\n", radar_initialized, data_ready_f);
@@ -309,7 +309,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi1.Init.CRCPolynomial = 7;
   hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
   {
     Error_Handler();

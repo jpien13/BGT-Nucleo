@@ -27,6 +27,16 @@ extern SPI_HandleTypeDef hspi1;
  * Page 19 of BGT60LTR11AIP User guide
  * https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f
  *
+ *
+ *Arbitration Protocol - Follow this sequence for each access:
+    * Drive SPICSN high for ≥100 ns
+    * Wait until SPIDO is low
+    * Drive SPICSN low to reserve the bus
+    * Wait ≥100 ns for SPICSN synchronization
+    * Check SPIDO again - if high, restart from step 1
+    * Perform the data transmission
+    * Drive SPICSN high to release the bus
+ *
  */
 uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
     uint8_t tx_data[3];
@@ -39,18 +49,61 @@ uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
     tx_data[1] = 0; 								// Dummy byte (ignored by radar)
     tx_data[2] = 0; 								// Dummy byte (ignored by radar)
 
-    // CS low to start SPI transfer occurs here
-    HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_RESET);
-    if(HAL_SPI_TransmitReceive(&hspi1, tx_data, rx_data, sizeof(tx_data), 100) != HAL_OK) {
-        HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
-        return HAL_ERROR;
-    }
-    // CS high to end
-    HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+    uint8_t retry_count = 0;
+    const uint8_t MAX_RETRIES = 5;
 
-    // After transmission, the 16-bit register value is reconstructed from the received bytes:
-    *data = ((uint16_t)(rx_data[1] << 8) | (uint16_t)(rx_data[2]));
-    return HAL_OK;
+    // Arbitration protocol (Page 18 of https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f)
+    // Note: If you block the SPI interface for too long (by keeping CS low), you disrupt the sequencer's timing
+
+    while (retry_count < MAX_RETRIES) {
+    	// 1. Initially SPICSN is driven high. Minimum for ≥100 ns
+		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+		// Small delay to ensure we meet the ≥100 ns requirement
+		for(volatile uint8_t i = 0; i < 10; i++);
+
+		// 2. Wait until SPIDO is low (high means the internal sequencer is using the SPI)
+		//     - That should not take long. However, if something is completely broken a timeout may help
+		//       in detecting such issues. Skip this step if “miso_drv”=0!
+		// In a multi-radar setup, this checks if the internal sequencer is using SPI
+		// Could implement a timeout here for robustness
+		uint32_t timeout = HAL_GetTick() + 5; // 5ms timeout
+		while(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6) == GPIO_PIN_SET) { // Assuming MISO is on PA6
+			if(HAL_GetTick() > timeout) {
+				retry_count++;
+				continue; // Go back to step 1
+			}
+		}
+
+		// 3. Drive SPICSN low (try to reserve the bus)
+		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_RESET);
+
+		// 4. Wait for ≥100 ns (the time needed for synchronization of SPICSN)
+		for(volatile uint8_t i = 0; i < 10; i++);
+
+		// 5. Check SPIDO again. If it is high now (sequencer has just started SPI also), go to step 1
+		//		- Otherwise, continue to step 6
+		if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6) == GPIO_PIN_SET) {
+			HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+			retry_count++;
+			continue; // Go back to start of the loop (step 1)
+		}
+
+		// 6. Perform the data transmission
+		if(HAL_SPI_TransmitReceive(&hspi1, tx_data, rx_data, sizeof(tx_data), 100) != HAL_OK) {
+			HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+			return HAL_ERROR;
+		}
+
+		// 7. Drive SPICSN high to release the bus
+		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+
+		// Success! Process the data and return
+		// After transmission, the 16-bit register value is reconstructed from the received bytes:
+		*data = ((uint16_t)(rx_data[1] << 8) | (uint16_t)(rx_data[2]));
+		return HAL_OK;
+    }
+    // If we reach here, exceeded the retry limit currently set as 5
+    return HAL_ERROR;
 }
 
 /*
@@ -68,21 +121,63 @@ uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
  */
 uint8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
 	uint8_t tx_data[3];
+	uint8_t retry_count = 0;
+	const uint8_t MAX_RETRIES = 5;
 	uint16_t wrdata = data;
 
 	tx_data[0] = (uint8_t)((reg_addr << 1) | 0x01); // Shifts the 7-bit address to make room for the RW bit. Address (7 bits) + RW bit (1)
 	tx_data[1] = (uint8_t)((wrdata >> 8) & 0xFF);   // Upper 8 bits of data (MSB first)
 	tx_data[2] = (uint8_t)(wrdata & 0xFF);			// Lower 8 bits of data
 
-    // CS low to start SPI transfer occurs here
-	HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_RESET);
-	if(HAL_SPI_Transmit(&hspi1, tx_data, sizeof(tx_data)/sizeof(uint8_t), 100) != HAL_OK) {
+
+	// Arbitration protocol
+	while (retry_count < MAX_RETRIES) {
+		// 1. Initially SPICSN is high
 		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
-		return HAL_ERROR;
+
+		// Delay for ≥100 ns
+		for(volatile uint8_t i = 0; i < 10; i++);
+
+		// 2. Wait until SPIDO is low (when miso_drv=1)
+		// Assuming MISO is on PA6 - adjust to your actual pin
+		uint32_t timeout = HAL_GetTick() + 5; // 5ms timeout
+		while(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6) == GPIO_PIN_SET) {
+			if(HAL_GetTick() > timeout) {
+				retry_count++;
+				continue; // Go back to step 1
+			}
+		}
+
+		// 3. Drive SPICSN low to reserve the bus
+		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_RESET);
+
+		// 4. Wait for ≥100 ns for SPICSN synchronization
+		for(volatile uint8_t i = 0; i < 10; i++);
+
+		// 5. Check SPIDO again - if high, go back to step 1
+		if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6) == GPIO_PIN_SET) {
+			// Release the bus and try again
+			HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+			retry_count++;
+			continue; // Go back to start of the loop (step 1)
+		}
+
+		// 6. Perform the data transmission
+		if(HAL_SPI_Transmit(&hspi1, tx_data, sizeof(tx_data)/sizeof(uint8_t), 100) != HAL_OK) {
+			HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+			return HAL_ERROR;
+		}
+
+		// 7. Drive SPICSN high to release the bus
+		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+
+		// Success!
+		return HAL_OK;
 	}
-	// CS high to end
-	HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
-	return HAL_OK;
+
+	// If we reach here, we've exceeded our retry limit
+	return HAL_ERROR;
+
 }
 
 uint8_t bgt60ltr11_HW_reset(void){
@@ -180,6 +275,11 @@ uint8_t bgt60ltr11_pulsed_mode_init(void) {
 	if (bgt60ltr11_soft_reset(0) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
+    // Set miso_drv bit (Reg15[6]) to 1, critical for making SPIDO available for arbitration
+    if (bgt60ltr11_spi_write(0x0F, 0x0040) != HAL_OK) return HAL_ERROR;
+    HAL_Delay(1);
+
+
 	// Write to each register and check the result
 
 	if (bgt60ltr11_spi_write(0x00, 0x0000) != HAL_OK) return HAL_ERROR;
@@ -239,11 +339,10 @@ uint8_t bgt60ltr11_pulsed_mode_init(void) {
 	if (bgt60ltr11_spi_write(0x22, 0x0007) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 	*/
-	if (bgt60ltr11_spi_write(0x0F, 0x4000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(0x0F, 0x4040) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
+
+
 
 	return HAL_OK;
 }
-
-// TODO: Figure out the gpio.c and spi.c files, give all files currently have
-// TODO: Look at repo main.c and reverse engineer
