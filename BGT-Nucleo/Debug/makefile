@@ -61,7 +61,7 @@ main-build: BGT-Nucleo.elf secondary-outputs
 
 # Tool invocations
 BGT-Nucleo.elf BGT-Nucleo.map: $(OBJS) $(USER_OBJS) /Users/jasonpien/git/BGT-Nucleo/BGT-Nucleo/STM32L432KCUX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "BGT-Nucleo.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/jasonpien/git/BGT-Nucleo/BGT-Nucleo/STM32L432KCUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="BGT-Nucleo.map" -Wl,--gc-sections -static -u _printf_float --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+	arm-none-eabi-gcc -o "BGT-Nucleo.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/jasonpien/git/BGT-Nucleo/BGT-Nucleo/STM32L432KCUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="BGT-Nucleo.map" -Wl,--gc-sections -static -L/Users/jasonpien/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.1/Drivers/CMSIS/DSP/Lib/GCC -u _printf_float --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
