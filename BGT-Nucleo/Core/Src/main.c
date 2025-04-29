@@ -52,34 +52,48 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-uint16_t IFI_sample[FFT_BUFFER_SIZE];
-uint16_t IFQ_sample[FFT_BUFFER_SIZE];
 
-extern float32_t sampled_data[2 * FFT_BUFFER_SIZE];
-// Define two buffers for double buffering
-float32_t buffer1[2 * FFT_BUFFER_SIZE];
-float32_t buffer2[2 * FFT_BUFFER_SIZE];
+// Radar 1 data structures
+uint16_t IFI_radar1 = 0;
+uint16_t IFQ_radar1 = 0;
+float32_t buffer1_radar1[2 * FFT_BUFFER_SIZE];
+float32_t buffer2_radar1[2 * FFT_BUFFER_SIZE];
+float32_t *active_buffer_radar1 = buffer1_radar1;
+float32_t *processing_buffer_radar1 = buffer2_radar1;
+uint16_t acquired_sample_count_radar1 = 0;
+uint8_t data_ready_f_radar1 = 0;
+float32_t peak_index_radar1 = 0.0f;
+float32_t max_value_radar1 = 0.0f;
+float32_t target_velocity_radar1 = 0.0f;
 
-// Pointers to active (writing) and processing buffers
-float32_t *active_buffer = buffer1;
-float32_t *processing_buffer = buffer2;
+// Radar 2 data structures
+uint16_t IFI_radar2 = 0;
+uint16_t IFQ_radar2 = 0;
+float32_t buffer1_radar2[2 * FFT_BUFFER_SIZE];
+float32_t buffer2_radar2[2 * FFT_BUFFER_SIZE];
+float32_t *active_buffer_radar2 = buffer1_radar2;
+float32_t *processing_buffer_radar2 = buffer2_radar2;
+uint16_t acquired_sample_count_radar2 = 0;
+uint8_t data_ready_f_radar2 = 0;
+float32_t peak_index_radar2 = 0.0f;
+float32_t max_value_radar2 = 0.0f;
+float32_t target_velocity_radar2 = 0.0f;
 
-float32_t max_value = 0.0f;
-float32_t peak_index = 0.0f;
-float32_t target_velocity = 0.0f;
-
-uint16_t IFI = 0;
-uint16_t IFQ = 0;
+// Shared variables
+uint8_t radar1_initialized = 0;
+uint8_t radar2_initialized = 0;
 uint32_t error_cnt = 0;
-uint8_t radar_initialized = 0;
-uint16_t acquired_sample_count = 0;
-uint8_t data_ready_f = 1;
 
 #define VELOCITY_BUFFER_SIZE 5
-float32_t velocity_buffer[VELOCITY_BUFFER_SIZE];
-uint8_t velocity_buffer_index = 0;
-uint8_t velocity_buffer_filled = 0;
-float32_t velocity_average = 0.0f;
+float32_t velocity_buffer_radar1[VELOCITY_BUFFER_SIZE];
+uint8_t velocity_buffer_index_radar1 = 0;
+uint8_t velocity_buffer_filled_radar1 = 0;
+float32_t velocity_average_radar1 = 0.0f;
+
+float32_t velocity_buffer_radar2[VELOCITY_BUFFER_SIZE];
+uint8_t velocity_buffer_index_radar2 = 0;
+uint8_t velocity_buffer_filled_radar2 = 0;
+float32_t velocity_average_radar2 = 0.0f;
 
 uint32_t pa10_toggle_timestamp = 0;
 const uint32_t PA10_TOGGLE_INTERVAL = 5000; // 5 seconds in milliseconds
@@ -93,7 +107,8 @@ static void MX_SPI1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-float32_t calculate_rolling_average_with_filtering(float32_t new_value);
+float32_t calculate_rolling_average_with_filtering1(float32_t new_value);
+float32_t calculate_rolling_average_with_filtering2(float32_t new_value);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -145,32 +160,35 @@ int main(void)
   MX_TIM2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-  pa10_current_state = GPIO_PIN_RESET;
-  pa10_toggle_timestamp = HAL_GetTick();
+  // Initialize CS pins
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);   // Radar 1 CS high
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);  // Radar 2 CS high
 
-
-  bgt60ltr11_HW_reset();
+  // Initialize Radar 1
+  bgt60ltr11_HW_reset(RADAR_1);
   HAL_Delay(100);  // Wait for radar to stabilize
-  if (bgt60ltr11_pulsed_mode_init() != HAL_OK) {
-	  // Failed to initialize - LED should blink in error handler
-	  Error_Handler();
+  if (bgt60ltr11_pulsed_mode_init(RADAR_1) != HAL_OK) {
+      Error_Handler();
   }
-  HAL_Delay(1000);
 
-  // Test SPI communication
-//  if (bgt60ltr11_test() != HAL_OK) {
-//	  // SPI test failed
-//	  Error_Handler();
-//  }
+  // Initialize Radar 2
+  bgt60ltr11_HW_reset(RADAR_2);
+  HAL_Delay(100);  // Wait for radar to stabilize
+  if (bgt60ltr11_pulsed_mode_init(RADAR_2) != HAL_OK) {
+      Error_Handler();
+  }
+
+  HAL_Delay(1000);
   HAL_TIM_Base_Start_IT(&htim2);
-  // radar successfully initialized
-  radar_initialized = 1;
+
+  // Radars successfully initialized
+  radar1_initialized = 1;
+  radar2_initialized = 1;
 
   for (uint8_t i = 0; i < VELOCITY_BUFFER_SIZE; i++) {
-      velocity_buffer[i] = 0.0f;
+	  velocity_buffer_radar1[i] = 0.0f;
+	  velocity_buffer_radar2[i] = 0.0f;
   }
 
   /* USER CODE END 2 */
@@ -180,50 +198,52 @@ int main(void)
   // HI JASON!!!!!!
   while (1)
   {
-	  printf("-\r\n");
-	  if (HAL_GPIO_ReadPin(TD_GPIO_Port, TD_Pin) == GPIO_PIN_RESET) {
-		  // TD = 0
-		  if (HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET) {
-			  // PD = 1
-			  printf("APPROACHING!!!!!\r\n");
-		  } else {
-			  // PD = 0
-			  printf("DEPARTING!!!!!\r\n");
-		  }
+	  // Process Radar 1 data when ready
+	  if (radar1_initialized && data_ready_f_radar1) {
+		  fft256_spectrum(processing_buffer_radar1);
+		  find_peak_frequency(processing_buffer_radar1, FFT_BUFFER_SIZE, 1000, &peak_index_radar1, &max_value_radar1, &target_velocity_radar1);
+		  velocity_average_radar1 = calculate_rolling_average_with_filtering1(target_velocity_radar1);
+		  printf("Radar 1 - velocity: %.5f\r\n", velocity_average_radar1);
+		  data_ready_f_radar1 = 0;
+		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 	  }
 
-	  // Check if it's time to toggle PA10
-	  uint32_t current_time = HAL_GetTick();
-	  if(current_time - pa10_toggle_timestamp >= PA10_TOGGLE_INTERVAL) {
-		  // Toggle the state by writing the opposite of current state
-		  pa10_current_state = (pa10_current_state == GPIO_PIN_RESET) ? GPIO_PIN_SET : GPIO_PIN_RESET;
-		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, pa10_current_state);
-		  pa10_toggle_timestamp = current_time;
-		  printf("PA10 set to %s\r\n", (pa10_current_state == GPIO_PIN_SET) ? "HIGH" : "LOW"); // improved debug message
+	  // Process Radar 2 data when ready
+	  if (radar2_initialized && data_ready_f_radar2) {
+		  fft256_spectrum(processing_buffer_radar2);
+		  find_peak_frequency(processing_buffer_radar2, FFT_BUFFER_SIZE, 1000, &peak_index_radar2, &max_value_radar2, &target_velocity_radar2);
+		  velocity_average_radar2 = calculate_rolling_average_with_filtering2(target_velocity_radar2);
+		  printf("Radar 2 - velocity: %.5f\r\n", velocity_average_radar2);
+		  data_ready_f_radar2 = 0;
+		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 	  }
+
+//	  printf("-\r\n");
+//	  if (HAL_GPIO_ReadPin(TD_GPIO_Port, TD_Pin) == GPIO_PIN_RESET) {
+//		  // TD = 0
+//		  if (HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET) {
+//			  // PD = 1
+//			  printf("APPROACHING!!!!!\r\n");
+//		  } else {
+//			  // PD = 0
+//			  printf("DEPARTING!!!!!\r\n");
+//		  }
+//	  }
+
+	  // Check if it's time to toggle PA10
+//	  uint32_t current_time = HAL_GetTick();
+//	  if(current_time - pa10_toggle_timestamp >= PA10_TOGGLE_INTERVAL) {
+//		  // Toggle the state by writing the opposite of current state
+//		  pa10_current_state = (pa10_current_state == GPIO_PIN_RESET) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+//		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, pa10_current_state);
+//		  pa10_toggle_timestamp = current_time;
+//		  printf("PA10 set to %s\r\n", (pa10_current_state == GPIO_PIN_SET) ? "HIGH" : "LOW"); // improved debug message
+//	  }
 
 	  //printf("radar_init=%u, data_ready=%u\r\n", radar_initialized, data_ready_f);
 
-	  if (radar_initialized && data_ready_f){
-		  // printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
-	      fft256_spectrum(processing_buffer);
-	      find_peak_frequency(processing_buffer, FFT_BUFFER_SIZE, 1000, &peak_index, &max_value, &target_velocity);
+	  HAL_Delay(100);
 
-	      // Calculate the rolling average of the velocity
-	      velocity_average = calculate_rolling_average_with_filtering(target_velocity);
-
-	      data_ready_f = 0;
-
-	      // Print both raw and averaged velocity for comparison
-	      printf("peak_index: %.5f, max_value: %.5f, raw_velocity: %.5f, avg_velocity: %.5f\r\n",
-	             peak_index, max_value, target_velocity, velocity_average);
-
-	      // Toggle LED to indicate successful reading
-	      HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
-	  }
-
-	  HAL_Delay(100); // small delay between readings
-	  // austin was here again
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -447,81 +467,129 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+    if (htim == &htim2) {
+        // Alternate between radars (you could also use a counter to give equal time)
+        static uint8_t current_radar = RADAR_1;
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-	if (htim == &htim2)
-	    {
-	        // Ensure we don't overflow the active buffer
-	        if (acquired_sample_count < FFT_BUFFER_SIZE)
-	        {
-	            if (bgt60ltr11_get_RAW_data(&IFI, &IFQ) == HAL_OK)
-	            {
-	            	//printf("IFI: %u, IFQ: %u\r\n", IFI, IFQ);
-	                // Only store values if they are below the threshold 0x3FC
-	                if (IFI <= 0x3FC && IFQ <= 0x3FC)
-	                {
-	                    // Store radar data into the active buffer
-	                    active_buffer[2 * acquired_sample_count + 0] = (float32_t)(IFI >> 2) / 255.0f; // Scale to [0, 1]
-	                    active_buffer[2 * acquired_sample_count + 1] = (float32_t)(IFQ >> 2) / 255.0f; // Scale to [0, 1]
+        if (current_radar == RADAR_1) {
+            // Process Radar 1
+            if (acquired_sample_count_radar1 < FFT_BUFFER_SIZE) {
+                if (bgt60ltr11_get_RAW_data(RADAR_1, &IFI_radar1, &IFQ_radar1) == HAL_OK) {
+                    if (IFI_radar1 <= 0x3FC && IFQ_radar1 <= 0x3FC) {
+                        active_buffer_radar1[2 * acquired_sample_count_radar1] =  (float32_t)(IFI_radar1 >> 2) / 255.0f;
+                        active_buffer_radar1[2 * acquired_sample_count_radar1 + 1] = (float32_t)(IFQ_radar1 >> 2) / 255.0f;
+                        acquired_sample_count_radar1++;
+                    }
+                } else {
+                    error_cnt++;
+                }
+            } else {
+                // Buffer full, swap buffers
+                float32_t *temp = active_buffer_radar1;
+                active_buffer_radar1 = processing_buffer_radar1;
+                processing_buffer_radar1 = temp;
+                data_ready_f_radar1 = 1;
+                acquired_sample_count_radar1 = 0;
+            }
+        } else {
+            // Process Radar 2 (similar code)
+            if (acquired_sample_count_radar2 < FFT_BUFFER_SIZE) {
+                if (bgt60ltr11_get_RAW_data(RADAR_2, &IFI_radar2, &IFQ_radar2) == HAL_OK) {
+                    // Same processing for radar 2
+                    if (IFI_radar2 <= 0x3FC && IFQ_radar2 <= 0x3FC) {
+                        active_buffer_radar2[2 * acquired_sample_count_radar2] =
+                            (float32_t)(IFI_radar2 >> 2) / 255.0f;
+                        active_buffer_radar2[2 * acquired_sample_count_radar2 + 1] =
+                            (float32_t)(IFQ_radar2 >> 2) / 255.0f;
+                        acquired_sample_count_radar2++;
+                    }
+                } else {
+                    error_cnt++;
+                }
+            } else {
+                // Buffer full, swap buffers
+                float32_t *temp = active_buffer_radar2;
+                active_buffer_radar2 = processing_buffer_radar2;
+                processing_buffer_radar2 = temp;
+                data_ready_f_radar2 = 1;
+                acquired_sample_count_radar2 = 0;
+            }
+        }
 
-	                    acquired_sample_count++; // Increment sample count
-	                }
-	                // printf("acquired sample count: %u\n", acquired_sample_count);
-	            }
-	            else
-	            {
-	                // Handle radar read error
-	                error_cnt++;
-	            }
-	        }
-	        else
-	        {
-	            // Buffer is full, toggle buffers
-	            float32_t *temp = active_buffer;
-	            active_buffer = processing_buffer;
-	            processing_buffer = temp;
-
-	            // Signal data is ready for processing
-	            data_ready_f = 1;
-	            // printf("set data ready to true!!\n");
-	            acquired_sample_count = 0; // Reset sample count for the new active buffer
-	        }
-	    }
+        // Toggle between radars
+        current_radar = (current_radar == RADAR_1) ? RADAR_2 : RADAR_1;
+    }
 }
+
+
 
 void sendDataToMonitor(float32_t vel) {
 	printf("DATA,%.5f\n", vel);
 }
 
-float32_t calculate_rolling_average_with_filtering(float32_t new_value) {
+float32_t calculate_rolling_average_with_filtering1(float32_t new_value) {
     // Set threshold for outlier detection (adjust based on your expected velocity range)
     float32_t max_deviation = 20.0f; // Maximum allowed deviation from current average
 
     // If we have a previous average and the new value deviates too much, reject it
-    if (velocity_buffer_filled && fabsf(new_value - velocity_average) > max_deviation) {
+    if (velocity_buffer_filled_radar1 && fabsf(new_value - velocity_average_radar1) > max_deviation) {
         // Outlier detected, don't add to buffer
-        printf("Outlier rejected: %.5f (current avg: %.5f)\r\n", new_value, velocity_average);
-        return velocity_average; // Return previous average
+        printf("Outlier rejected: %.5f (current avg: %.5f)\r\n", new_value, velocity_average_radar1);
+        return velocity_average_radar1; // Return previous average
     }
 
     // Regular rolling average calculation
-    velocity_buffer[velocity_buffer_index] = new_value;
-    velocity_buffer_index = (velocity_buffer_index + 1) % VELOCITY_BUFFER_SIZE;
+    velocity_buffer_radar1[velocity_buffer_index_radar1] = new_value;
+    velocity_buffer_index_radar1 = (velocity_buffer_index_radar1 + 1) % VELOCITY_BUFFER_SIZE;
 
-    if (velocity_buffer_index == 0 && velocity_buffer_filled == 0) {
-        velocity_buffer_filled = 1;
+    if (velocity_buffer_index_radar1 == 0 && velocity_buffer_filled_radar1 == 0) {
+        velocity_buffer_filled_radar1 = 1;
     }
 
     float32_t sum = 0.0f;
-    uint8_t count = velocity_buffer_filled ? VELOCITY_BUFFER_SIZE : velocity_buffer_index;
+    uint8_t count = velocity_buffer_filled_radar1 ? VELOCITY_BUFFER_SIZE : velocity_buffer_index_radar1;
 
     if (count == 0) {
         return new_value;
     }
 
     for (uint8_t i = 0; i < count; i++) {
-        sum += velocity_buffer[i];
+        sum += velocity_buffer_radar1[i];
+    }
+
+    return sum / count;
+}
+
+
+float32_t calculate_rolling_average_with_filtering2(float32_t new_value) {
+    // Set threshold for outlier detection (adjust based on your expected velocity range)
+    float32_t max_deviation = 20.0f; // Maximum allowed deviation from current average
+
+    // If we have a previous average and the new value deviates too much, reject it
+    if (velocity_buffer_filled_radar2 && fabsf(new_value - velocity_average_radar2) > max_deviation) {
+        // Outlier detected, don't add to buffer
+        printf("Outlier rejected: %.5f (current avg: %.5f)\r\n", new_value, velocity_average_radar2);
+        return velocity_average_radar2; // Return previous average
+    }
+
+    // Regular rolling average calculation
+    velocity_buffer_radar2[velocity_buffer_index_radar2] = new_value;
+    velocity_buffer_index_radar2 = (velocity_buffer_index_radar2 + 1) % VELOCITY_BUFFER_SIZE;
+
+    if (velocity_buffer_index_radar2 == 0 && velocity_buffer_filled_radar2 == 0) {
+        velocity_buffer_filled_radar2 = 1;
+    }
+
+    float32_t sum = 0.0f;
+    uint8_t count = velocity_buffer_filled_radar2 ? VELOCITY_BUFFER_SIZE : velocity_buffer_index_radar2;
+
+    if (count == 0) {
+        return new_value;
+    }
+
+    for (uint8_t i = 0; i < count; i++) {
+        sum += velocity_buffer_radar2[i];
     }
 
     return sum / count;

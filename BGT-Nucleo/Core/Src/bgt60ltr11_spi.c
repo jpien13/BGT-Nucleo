@@ -8,8 +8,11 @@
 #include "bgt60ltr11_spi.h"
 #include "main.h"
 
-#define BGT60_CS_PORT GPIOA
-#define BGT60_CS_PIN  GPIO_PIN_4
+#define RADAR1_CS_PORT GPIOA
+#define RADAR1_CS_PIN  GPIO_PIN_4
+#define RADAR2_CS_PORT GPIOA
+#define RADAR2_CS_PIN  GPIO_PIN_10
+
 extern void HAL_GPIO_TogglePin(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
 #define LD3_GPIO_Port GPIOB
 #define LD3_Pin GPIO_PIN_3
@@ -38,7 +41,7 @@ extern SPI_HandleTypeDef hspi1;
     * Drive SPICSN high to release the bus
  *
  */
-uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
+uint8_t bgt60ltr11_spi_read(RadarId_t radar_id, uint8_t reg_addr, uint16_t *data) {
     uint8_t tx_data[3];
     uint8_t rx_data[3] = {0, 0, 0};
 
@@ -52,12 +55,23 @@ uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
     uint8_t retry_count = 0;
     const uint8_t MAX_RETRIES = 5;
 
+    GPIO_TypeDef* cs_port;
+    uint16_t cs_pin;
+
+    if (radar_id == RADAR_1) {
+		cs_port = RADAR1_CS_PORT;
+		cs_pin = RADAR1_CS_PIN;
+	} else {
+		cs_port = RADAR2_CS_PORT;
+		cs_pin = RADAR2_CS_PIN;
+	}
+
     // Arbitration protocol (Page 18 of https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f)
     // Note: If you block the SPI interface for too long (by keeping CS low), you disrupt the sequencer's timing
 
     while (retry_count < MAX_RETRIES) {
     	// 1. Initially SPICSN is driven high. Minimum for ≥100 ns
-		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 		// Small delay to ensure we meet the ≥100 ns requirement
 		for(volatile uint8_t i = 0; i < 10; i++);
 
@@ -75,7 +89,7 @@ uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
 		}
 
 		// 3. Drive SPICSN low (try to reserve the bus)
-		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_RESET);
 
 		// 4. Wait for ≥100 ns (the time needed for synchronization of SPICSN)
 		for(volatile uint8_t i = 0; i < 10; i++);
@@ -83,19 +97,19 @@ uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
 		// 5. Check SPIDO again. If it is high now (sequencer has just started SPI also), go to step 1
 		//		- Otherwise, continue to step 6
 		if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6) == GPIO_PIN_SET) {
-			HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 			retry_count++;
 			continue; // Go back to start of the loop (step 1)
 		}
 
 		// 6. Perform the data transmission
 		if(HAL_SPI_TransmitReceive(&hspi1, tx_data, rx_data, sizeof(tx_data), 100) != HAL_OK) {
-			HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 			return HAL_ERROR;
 		}
 
 		// 7. Drive SPICSN high to release the bus
-		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 
 		// Success! Process the data and return
 		// After transmission, the 16-bit register value is reconstructed from the received bytes:
@@ -119,11 +133,22 @@ uint8_t bgt60ltr11_spi_read(uint8_t reg_addr, uint16_t *data) {
  * https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f
  *
  */
-uint8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
+uint8_t bgt60ltr11_spi_write(RadarId_t radar_id, uint8_t reg_addr, uint16_t data){
 	uint8_t tx_data[3];
 	uint8_t retry_count = 0;
 	const uint8_t MAX_RETRIES = 5;
 	uint16_t wrdata = data;
+
+	GPIO_TypeDef* cs_port;
+	uint16_t cs_pin;
+
+	if (radar_id == RADAR_1) {
+		cs_port = RADAR1_CS_PORT;
+		cs_pin = RADAR1_CS_PIN;
+	} else {
+		cs_port = RADAR2_CS_PORT;
+		cs_pin = RADAR2_CS_PIN;
+	}
 
 	tx_data[0] = (uint8_t)((reg_addr << 1) | 0x01); // Shifts the 7-bit address to make room for the RW bit. Address (7 bits) + RW bit (1)
 	tx_data[1] = (uint8_t)((wrdata >> 8) & 0xFF);   // Upper 8 bits of data (MSB first)
@@ -133,7 +158,7 @@ uint8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
 	// Arbitration protocol
 	while (retry_count < MAX_RETRIES) {
 		// 1. Initially SPICSN is high
-		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 
 		// Delay for ≥100 ns
 		for(volatile uint8_t i = 0; i < 10; i++);
@@ -149,7 +174,7 @@ uint8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
 		}
 
 		// 3. Drive SPICSN low to reserve the bus
-		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_RESET);
 
 		// 4. Wait for ≥100 ns for SPICSN synchronization
 		for(volatile uint8_t i = 0; i < 10; i++);
@@ -157,19 +182,19 @@ uint8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
 		// 5. Check SPIDO again - if high, go back to step 1
 		if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_6) == GPIO_PIN_SET) {
 			// Release the bus and try again
-			HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 			retry_count++;
 			continue; // Go back to start of the loop (step 1)
 		}
 
 		// 6. Perform the data transmission
 		if(HAL_SPI_Transmit(&hspi1, tx_data, sizeof(tx_data)/sizeof(uint8_t), 100) != HAL_OK) {
-			HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 			return HAL_ERROR;
 		}
 
 		// 7. Drive SPICSN high to release the bus
-		HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 
 		// Success!
 		return HAL_OK;
@@ -180,10 +205,20 @@ uint8_t bgt60ltr11_spi_write(uint8_t reg_addr, uint16_t data){
 
 }
 
-uint8_t bgt60ltr11_HW_reset(void){
-	HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_RESET);
+uint8_t bgt60ltr11_HW_reset(RadarId_t radar_id){
+	GPIO_TypeDef* cs_port;
+	uint16_t cs_pin;
+
+	if (radar_id == RADAR_1) {
+		cs_port = RADAR1_CS_PORT;
+		cs_pin = RADAR1_CS_PIN;
+	} else {
+		cs_port = RADAR2_CS_PORT;
+		cs_pin = RADAR2_CS_PIN;
+	}
+	HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_RESET);
 	HAL_Delay(10);
-	HAL_GPIO_WritePin(BGT60_CS_PORT, BGT60_CS_PIN, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(cs_port, cs_pin, GPIO_PIN_SET);
 	return HAL_OK;
 }
 
@@ -191,9 +226,9 @@ uint8_t bgt60ltr11_HW_reset(void){
  * Register assignment of Reg36
  * Page 45 https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f
  */
-uint8_t bgt60ltr11_adc_status(void){
+uint8_t bgt60ltr11_adc_status(RadarId_t radar_id){
 	uint16_t adc_status;
-	if(bgt60ltr11_spi_read(0x24, &adc_status) != HAL_OK){
+	if(bgt60ltr11_spi_read(radar_id, 0x24, &adc_status) != HAL_OK){
 		return HAL_ERROR;
 	}
 	if(adc_status ==0){
@@ -208,16 +243,16 @@ uint8_t bgt60ltr11_adc_status(void){
  *  There are 56 Registers according to register overview on page 21
  *  Page 6 https://www.infineon.com/dgdl/Infineon-UG124434_User_guide_to_BGT60LTR11AIP-UserManual-v01_80-EN.pdf?fileId=8ac78c8c8823155701885724e6d72f8f
  */
-uint8_t bgt60ltr11_soft_reset(uint8_t wait){
-	bgt60ltr11_spi_write(0x0F, (1 << 15));
+uint8_t bgt60ltr11_soft_reset(RadarId_t radar_id, uint8_t wait){
+	bgt60ltr11_spi_write(radar_id, 0x0F, (1 << 15));
 	uint16_t reg56 = 0;
 	uint16_t reg0 = 0;
 
 	if (wait){
 		// wait till init_done in REG56 is set
 		for (volatile uint16_t i = 0; i < 2048; i++){
-			bgt60ltr11_spi_read(0x38, &reg56);
-			bgt60ltr11_spi_read(0x00, &reg0);
+			bgt60ltr11_spi_read(radar_id, 0x38, &reg56);
+			bgt60ltr11_spi_read(radar_id, 0x00, &reg0);
 			// check if REG0 has default values and REG56 bit init_done is set
 			if (reg0 == 0 && reg56 & (1 << 13)){
 				return HAL_OK;
@@ -236,8 +271,8 @@ uint8_t bgt60ltr11_soft_reset(uint8_t wait){
  * Address: 0x23
  * reset value: 0x0000
  */
-uint8_t bgt60ltr11_ADC_Convert(void){
-	if (bgt60ltr11_spi_write(0x23, 0010) != HAL_OK){
+uint8_t bgt60ltr11_ADC_Convert(RadarId_t radar_id){
+	if (bgt60ltr11_spi_write(radar_id, 0x23, 0010) != HAL_OK){
 		return HAL_ERROR;
 	}
 	HAL_Delay(1);
@@ -247,9 +282,9 @@ uint8_t bgt60ltr11_ADC_Convert(void){
 /*
  * Test if SPI works by reading reg 0x02 and verify value is 0x2A00
  */
-uint8_t bgt60ltr11_test(void){
+uint8_t bgt60ltr11_test(RadarId_t radar_id){
 	uint16_t data = 0;
-	if (bgt60ltr11_spi_read(0x02, &data) != HAL_OK){
+	if (bgt60ltr11_spi_read(radar_id, 0x02, &data) != HAL_OK){
 		return HAL_ERROR;
 	}
 	HAL_Delay(1);
@@ -264,82 +299,82 @@ uint8_t bgt60ltr11_test(void){
 /*
  * Read ADC channel data directly into the provided pointers
  */
-uint8_t bgt60ltr11_get_RAW_data(uint16_t *ifi, uint16_t *ifq){
-	if (bgt60ltr11_spi_read(0x28, ifi) != HAL_OK) return HAL_ERROR;
-	if (bgt60ltr11_spi_read(0x29, ifq) != HAL_OK) return HAL_ERROR;
+uint8_t bgt60ltr11_get_RAW_data(RadarId_t radar_id, uint16_t *ifi, uint16_t *ifq){
+	if (bgt60ltr11_spi_read(radar_id, 0x28, ifi) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_read(radar_id, 0x29, ifq) != HAL_OK) return HAL_ERROR;
 	return HAL_OK;
 }
 
-uint8_t bgt60ltr11_pulsed_mode_init(void) {
+uint8_t bgt60ltr11_pulsed_mode_init(RadarId_t radar_id) {
 	// Perform soft reset
-	if (bgt60ltr11_soft_reset(0) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_soft_reset(radar_id, 0) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
     // Set miso_drv bit (Reg15[6]) to 1, critical for making SPIDO available for arbitration
-    if (bgt60ltr11_spi_write(0x0F, 0x0040) != HAL_OK) return HAL_ERROR;
+    if (bgt60ltr11_spi_write(radar_id, 0x0F, 0x0040) != HAL_OK) return HAL_ERROR;
     HAL_Delay(1);
 
 
 	// Write to each register and check the result
 
-	if (bgt60ltr11_spi_write(0x00, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x00, 0x0000) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x01, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x01, 0x0000) != HAL_OK) return HAL_ERROR;
 	    HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x02, 0x2A00) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x02, 0x2A00) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
 	// TODO need to check the value for the REG3
 
-	if (bgt60ltr11_spi_write(0x04, 0x0F3A) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x04, 0x0F3A) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x05, 0x0FB0) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x05, 0x0FB0) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x06, 0x6800) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x06, 0x6800) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x07, 0x0557) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x07, 0x0557) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x08, 0x000E) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x08, 0x000E) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x09, 0x00E8) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x09, 0x00E8) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x0A, 0x004F) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x0A, 0x004F) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x0C, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x0C, 0x0000) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x0D, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x0D, 0x0000) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x0E, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x0E, 0x0000) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x0F, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x0F, 0x0000) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x22, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x22, 0x0000) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x23, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x23, 0x0000) != HAL_OK) return HAL_ERROR;
 	    HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(0x24, 0x0000) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x24, 0x0000) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 	/*
 	// ADC clock EN, bandgap EN, ADC EN
 	if (bgt60ltr11_spi_write(0x22, 0x0007) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 	*/
-	if (bgt60ltr11_spi_write(0x0F, 0x4040) != HAL_OK) return HAL_ERROR;
+	if (bgt60ltr11_spi_write(radar_id, 0x0F, 0x4040) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
 
