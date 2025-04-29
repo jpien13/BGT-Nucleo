@@ -7,3 +7,5 @@
 ../Core/Src/bgt60ltr11_spi.c:285:9:bgt60ltr11_test	3
 ../Core/Src/bgt60ltr11_spi.c:302:9:bgt60ltr11_get_RAW_data	3
 ../Core/Src/bgt60ltr11_spi.c:308:9:bgt60ltr11_pulsed_mode_init	21
+../Core/Src/bgt60ltr11_spi.c:385:9:bgt60ltr11_pulsed_mode_init_extended_range	3
+../Core/Src/bgt60ltr11_spi.c:395:9:bgt60ltr11_set_max_range	8

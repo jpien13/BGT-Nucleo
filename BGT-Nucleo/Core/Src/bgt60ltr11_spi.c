@@ -381,3 +381,37 @@ uint8_t bgt60ltr11_pulsed_mode_init(RadarId_t radar_id) {
 
 	return HAL_OK;
 }
+
+uint8_t bgt60ltr11_pulsed_mode_init_extended_range(RadarId_t radar_id) {
+    // First call the original initialization
+    if (bgt60ltr11_pulsed_mode_init(radar_id) != HAL_OK) return HAL_ERROR;
+
+    // Then apply range enhancements
+    if (bgt60ltr11_set_max_range(radar_id) != HAL_OK) return HAL_ERROR;
+
+    return HAL_OK;
+}
+
+uint8_t bgt60ltr11_set_max_range(RadarId_t radar_id) {
+    // 1. Set a low detector threshold for higher sensitivity (66 is the minimum recommended value)
+    if (bgt60ltr11_spi_write(radar_id, 0x02, 66) != HAL_OK) return HAL_ERROR;
+
+    // 2. Set maximum MPA gain (Reg7[2:0] = 7) to 4.5 dBm
+    uint16_t reg7_value;
+    if (bgt60ltr11_spi_read(radar_id, 0x07, &reg7_value) != HAL_OK) return HAL_ERROR;
+    reg7_value = (reg7_value & ~0x0007) | 0x0007; // Set bits [2:0] to 111 (max gain)
+    if (bgt60ltr11_spi_write(radar_id, 0x07, reg7_value) != HAL_OK) return HAL_ERROR;
+
+    // 3. Set maximum baseband PGA gain to 50 dB (Reg9[3:0] = 8)
+    uint16_t reg9_value;
+    if (bgt60ltr11_spi_read(radar_id, 0x09, &reg9_value) != HAL_OK) return HAL_ERROR;
+    reg9_value = (reg9_value & ~0x000F) | 0x0008; // Set bits [3:0] to 1000 (50 dB)
+    if (bgt60ltr11_spi_write(radar_id, 0x09, reg9_value) != HAL_OK) return HAL_ERROR;
+
+    uint16_t reg2_value;
+    if (bgt60ltr11_spi_read(radar_id, 0x02, &reg2_value) != HAL_OK) return HAL_ERROR;
+    reg2_value |= (1 << 15); // Set HPRT bit
+    if (bgt60ltr11_spi_write(radar_id, 0x02, reg2_value) != HAL_OK) return HAL_ERROR;
+
+    return HAL_OK;
+}

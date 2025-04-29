@@ -84,7 +84,7 @@ uint8_t radar1_initialized = 0;
 uint8_t radar2_initialized = 0;
 uint32_t error_cnt = 0;
 
-#define VELOCITY_BUFFER_SIZE 5
+#define VELOCITY_BUFFER_SIZE 3
 float32_t velocity_buffer_radar1[VELOCITY_BUFFER_SIZE];
 uint8_t velocity_buffer_index_radar1 = 0;
 uint8_t velocity_buffer_filled_radar1 = 0;
@@ -168,14 +168,14 @@ int main(void)
   // Initialize Radar 1
   bgt60ltr11_HW_reset(RADAR_1);
   HAL_Delay(100);  // Wait for radar to stabilize
-  if (bgt60ltr11_pulsed_mode_init(RADAR_1) != HAL_OK) {
+  if (bgt60ltr11_pulsed_mode_init_extended_range(RADAR_1) != HAL_OK) {
       Error_Handler();
   }
 
   // Initialize Radar 2
   bgt60ltr11_HW_reset(RADAR_2);
   HAL_Delay(100);  // Wait for radar to stabilize
-  if (bgt60ltr11_pulsed_mode_init(RADAR_2) != HAL_OK) {
+  if (bgt60ltr11_pulsed_mode_init_extended_range(RADAR_2) != HAL_OK) {
       Error_Handler();
   }
 
@@ -198,24 +198,40 @@ int main(void)
   // HI JASON!!!!!!
   while (1)
   {
+	  //printf("PD Pin state: %s\r\n", HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET ? "HIGH" : "LOW");
+
 	  // Process Radar 1 data when ready
 	  if (radar1_initialized && data_ready_f_radar1) {
 		  fft256_spectrum(processing_buffer_radar1);
 		  find_peak_frequency(processing_buffer_radar1, FFT_BUFFER_SIZE, 1000, &peak_index_radar1, &max_value_radar1, &target_velocity_radar1);
-		  velocity_average_radar1 = calculate_rolling_average_with_filtering1(target_velocity_radar1);
-		  printf("Radar 1 - velocity: %.5f\r\n", velocity_average_radar1);
-		  data_ready_f_radar1 = 0;
+
+		  if ((HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET && target_velocity_radar1 > 0) ||
+		      (HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_RESET && target_velocity_radar1 < 0)) {
+
+		    //velocity_average_radar1 = calculate_rolling_average_with_filtering1(target_velocity_radar1);
+		    printf("Radar 1 - velocity: %.5f m/s \r\n", target_velocity_radar1);
+
+		  }
 		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+		  data_ready_f_radar1 = 0;
 	  }
 
 	  // Process Radar 2 data when ready
 	  if (radar2_initialized && data_ready_f_radar2) {
 		  fft256_spectrum(processing_buffer_radar2);
 		  find_peak_frequency(processing_buffer_radar2, FFT_BUFFER_SIZE, 1000, &peak_index_radar2, &max_value_radar2, &target_velocity_radar2);
-		  velocity_average_radar2 = calculate_rolling_average_with_filtering2(target_velocity_radar2);
-		  printf("Radar 2 - velocity: %.5f\r\n", velocity_average_radar2);
-		  data_ready_f_radar2 = 0;
+
+
+		  if ((HAL_GPIO_ReadPin(PD2_GPIO_Port, PD2_Pin) == GPIO_PIN_SET && target_velocity_radar2 > 0) ||
+			  (HAL_GPIO_ReadPin(PD2_GPIO_Port, PD2_Pin) == GPIO_PIN_RESET && target_velocity_radar2 < 0)) {
+
+			//velocity_average_radar2 = calculate_rolling_average_with_filtering2(target_velocity_radar2);
+			//printf("Radar 2 - velocity: %.5f m/s \r\n", target_velocity_radar2);
+			printf("\n");
+
+		  }
 		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+		  data_ready_f_radar2 = 0;
 	  }
 
 //	  printf("-\r\n");
@@ -448,8 +464,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PD_Pin TD_Pin */
-  GPIO_InitStruct.Pin = PD_Pin|TD_Pin;
+  /*Configure GPIO pins : PD_Pin PD2_Pin */
+  GPIO_InitStruct.Pin = PD_Pin|PD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -535,7 +551,7 @@ float32_t calculate_rolling_average_with_filtering1(float32_t new_value) {
     // If we have a previous average and the new value deviates too much, reject it
     if (velocity_buffer_filled_radar1 && fabsf(new_value - velocity_average_radar1) > max_deviation) {
         // Outlier detected, don't add to buffer
-        printf("Outlier rejected: %.5f (current avg: %.5f)\r\n", new_value, velocity_average_radar1);
+        //printf("Outlier rejected: %.5f (current avg: %.5f)\r\n", new_value, velocity_average_radar1);
         return velocity_average_radar1; // Return previous average
     }
 
@@ -569,7 +585,7 @@ float32_t calculate_rolling_average_with_filtering2(float32_t new_value) {
     // If we have a previous average and the new value deviates too much, reject it
     if (velocity_buffer_filled_radar2 && fabsf(new_value - velocity_average_radar2) > max_deviation) {
         // Outlier detected, don't add to buffer
-        printf("Outlier rejected: %.5f (current avg: %.5f)\r\n", new_value, velocity_average_radar2);
+        //printf("Outlier rejected: %.5f (current avg: %.5f)\r\n", new_value, velocity_average_radar2);
         return velocity_average_radar2; // Return previous average
     }
 

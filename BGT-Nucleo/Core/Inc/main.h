@@ -59,10 +59,12 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define PD_Pin GPIO_PIN_0
 #define PD_GPIO_Port GPIOB
+#define PD2_Pin GPIO_PIN_7
+#define PD2_GPIO_Port GPIOB
 #define LD3_Pin GPIO_PIN_3
 #define LD3_GPIO_Port GPIOB
-#define TD_Pin GPIO_PIN_7
-#define TD_GPIO_Port GPIOB
+#define PD2_Pin GPIO_PIN_7
+#define PD2_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

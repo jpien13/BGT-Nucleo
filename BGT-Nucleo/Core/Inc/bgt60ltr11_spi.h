@@ -24,6 +24,8 @@ uint8_t bgt60ltr11_soft_reset(RadarId_t radar_id, uint8_t wait);
 uint8_t bgt60ltr11_pulsed_mode_init(RadarId_t radar_id);
 uint8_t bgt60ltr11_get_RAW_data(RadarId_t radar_id, uint16_t *ifi, uint16_t *ifq);
 uint8_t bgt60ltr11_HW_reset(RadarId_t radar_id);
+uint8_t bgt60ltr11_pulsed_mode_init_extended_range(RadarId_t radar_id);
+uint8_t bgt60ltr11_set_max_range(RadarId_t radar_id);
 
 
 #endif /* INC_BGT60LTR11_SPI_H_ */

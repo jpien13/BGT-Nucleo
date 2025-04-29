@@ -230,11 +230,11 @@ void find_peak_frequency(const float32_t *spectrum, uint32_t fft_size, float32_t
 	float32_t nyquist_freq = sampling_rate / 2.0f; // Nyquist frequency
 	if (*peak_freq <= nyquist_freq) {
 		// Approaching: positive velocity
-		*target_velocity = (*peak_freq) * 3.6f * LAMBDA / 2.0f; // Convert to km/h if needed
+		*target_velocity = (*peak_freq) * LAMBDA / 2.0f; // Convert to km/h if needed
 	} else {
 		// Departing: negative velocity
 		float32_t adjusted_freq = sampling_rate - *peak_freq; // Fold frequency into [0, fs/2]
-		*target_velocity = -adjusted_freq * 3.6f * LAMBDA / 2.0f; // Negative sign for departing
+		*target_velocity = -adjusted_freq * LAMBDA / 2.0f; // Negative sign for departing
 	}
 }
 
