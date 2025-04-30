@@ -201,37 +201,42 @@ int main(void)
 	  //printf("PD Pin state: %s\r\n", HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET ? "HIGH" : "LOW");
 
 	  // Process Radar 1 data when ready
+	  //printf("radar_init=%u, data_ready=%u\r\n", radar1_initialized, data_ready_f_radar1);
 	  if (radar1_initialized && data_ready_f_radar1) {
 		  fft256_spectrum(processing_buffer_radar1);
 		  find_peak_frequency(processing_buffer_radar1, FFT_BUFFER_SIZE, 1000, &peak_index_radar1, &max_value_radar1, &target_velocity_radar1);
-
-		  if ((HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET && target_velocity_radar1 > 0) ||
-		      (HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_RESET && target_velocity_radar1 < 0)) {
-
-		    //velocity_average_radar1 = calculate_rolling_average_with_filtering1(target_velocity_radar1);
-		    printf("Radar 1 - velocity: %.5f m/s \r\n", target_velocity_radar1);
-
-		  }
+		  printf("Radar 1 - velocity: %.5f m/s\t", target_velocity_radar1);
+		  //printf("Radar 1 - velocity: %.5f m/s \r\n", target_velocity_radar1);
+//		  if ((HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_SET && target_velocity_radar1 > 0) ||
+//		      (HAL_GPIO_ReadPin(PD_GPIO_Port, PD_Pin) == GPIO_PIN_RESET && target_velocity_radar1 < 0)) {
+//
+//		    //velocity_average_radar1 = calculate_rolling_average_with_filtering1(target_velocity_radar1);
+//		    printf("Radar 1 - velocity: %.5f m/s \r\n", target_velocity_radar1);
+//
+//		  }
 		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 		  data_ready_f_radar1 = 0;
+	  } else {
+		  printf("%-35s", "");
 	  }
 
 	  // Process Radar 2 data when ready
 	  if (radar2_initialized && data_ready_f_radar2) {
 		  fft256_spectrum(processing_buffer_radar2);
 		  find_peak_frequency(processing_buffer_radar2, FFT_BUFFER_SIZE, 1000, &peak_index_radar2, &max_value_radar2, &target_velocity_radar2);
-
-
-		  if ((HAL_GPIO_ReadPin(PD2_GPIO_Port, PD2_Pin) == GPIO_PIN_SET && target_velocity_radar2 > 0) ||
-			  (HAL_GPIO_ReadPin(PD2_GPIO_Port, PD2_Pin) == GPIO_PIN_RESET && target_velocity_radar2 < 0)) {
-
-			//velocity_average_radar2 = calculate_rolling_average_with_filtering2(target_velocity_radar2);
-			//printf("Radar 2 - velocity: %.5f m/s \r\n", target_velocity_radar2);
-			printf("\n");
-
-		  }
+		  printf("Radar 2 - velocity: %.5f m/s", target_velocity_radar2);
+//		  if ((HAL_GPIO_ReadPin(PD2_GPIO_Port, PD2_Pin) == GPIO_PIN_SET && target_velocity_radar2 > 0) ||
+//			  (HAL_GPIO_ReadPin(PD2_GPIO_Port, PD2_Pin) == GPIO_PIN_RESET && target_velocity_radar2 < 0)) {
+//
+//			//velocity_average_radar2 = calculate_rolling_average_with_filtering2(target_velocity_radar2);
+//			//printf("Radar 2 - velocity: %.5f m/s \r\n", target_velocity_radar2);
+//			printf("\n");
+//
+//		  }
 		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 		  data_ready_f_radar2 = 0;
+	  } else {
+		  printf("\r\n");
 	  }
 
 //	  printf("-\r\n");
@@ -256,7 +261,7 @@ int main(void)
 //		  printf("PA10 set to %s\r\n", (pa10_current_state == GPIO_PIN_SET) ? "HIGH" : "LOW"); // improved debug message
 //	  }
 
-	  //printf("radar_init=%u, data_ready=%u\r\n", radar_initialized, data_ready_f);
+
 
 	  HAL_Delay(100);
 
@@ -455,7 +460,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_10, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, LD3_Pin|PD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PA4 PA10 */
   GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_10;
@@ -464,18 +469,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PD_Pin PD2_Pin */
-  GPIO_InitStruct.Pin = PD_Pin|PD2_Pin;
+  /*Configure GPIO pin : PD_Pin */
+  GPIO_InitStruct.Pin = PD_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(PD_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD3_Pin */
-  GPIO_InitStruct.Pin = LD3_Pin;
+  /*Configure GPIO pins : LD3_Pin PD2_Pin */
+  GPIO_InitStruct.Pin = LD3_Pin|PD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD3_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -509,15 +514,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
                 acquired_sample_count_radar1 = 0;
             }
         } else {
-            // Process Radar 2 (similar code)
+            // Process Radar 2
             if (acquired_sample_count_radar2 < FFT_BUFFER_SIZE) {
                 if (bgt60ltr11_get_RAW_data(RADAR_2, &IFI_radar2, &IFQ_radar2) == HAL_OK) {
-                    // Same processing for radar 2
                     if (IFI_radar2 <= 0x3FC && IFQ_radar2 <= 0x3FC) {
-                        active_buffer_radar2[2 * acquired_sample_count_radar2] =
-                            (float32_t)(IFI_radar2 >> 2) / 255.0f;
-                        active_buffer_radar2[2 * acquired_sample_count_radar2 + 1] =
-                            (float32_t)(IFQ_radar2 >> 2) / 255.0f;
+                        active_buffer_radar2[2 * acquired_sample_count_radar2] = (float32_t)(IFI_radar2 >> 2) / 255.0f;
+                        active_buffer_radar2[2 * acquired_sample_count_radar2 + 1] = (float32_t)(IFQ_radar2 >> 2) / 255.0f;
                         acquired_sample_count_radar2++;
                     }
                 } else {

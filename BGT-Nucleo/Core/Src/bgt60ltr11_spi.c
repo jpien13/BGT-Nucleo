@@ -331,7 +331,11 @@ uint8_t bgt60ltr11_pulsed_mode_init(RadarId_t radar_id) {
 	if (bgt60ltr11_spi_write(radar_id, 0x04, 0x0F3A) != HAL_OK) return HAL_ERROR;
 	HAL_Delay(1);
 
-	if (bgt60ltr11_spi_write(radar_id, 0x05, 0x0FB0) != HAL_OK) return HAL_ERROR;
+	if (radar_id == RADAR_1) {
+	    if (bgt60ltr11_spi_write(radar_id, 0x05, 0x0FB0) != HAL_OK) return HAL_ERROR; // 61.1 GHz
+	} else {
+	    if (bgt60ltr11_spi_write(radar_id, 0x05, 0x0FC6) != HAL_OK) return HAL_ERROR; // 61.3 GHz
+	}
 	HAL_Delay(1);
 
 	if (bgt60ltr11_spi_write(radar_id, 0x06, 0x6800) != HAL_OK) return HAL_ERROR;
@@ -394,7 +398,7 @@ uint8_t bgt60ltr11_pulsed_mode_init_extended_range(RadarId_t radar_id) {
 
 uint8_t bgt60ltr11_set_max_range(RadarId_t radar_id) {
     // 1. Set a low detector threshold for higher sensitivity (66 is the minimum recommended value)
-    if (bgt60ltr11_spi_write(radar_id, 0x02, 66) != HAL_OK) return HAL_ERROR;
+    if (bgt60ltr11_spi_write(radar_id, 0x02, 192) != HAL_OK) return HAL_ERROR;
 
     // 2. Set maximum MPA gain (Reg7[2:0] = 7) to 4.5 dBm
     uint16_t reg7_value;
